@@ -1,6 +1,6 @@
 FROM alpine:3.19
 
-RUN apk add --no-cache openconnect squid bash curl iproute2
+RUN apk add --no-cache openconnect squid bash curl iproute2 openssl
 
 COPY squid.conf /etc/squid/squid.conf
 COPY entrypoint.sh /entrypoint.sh

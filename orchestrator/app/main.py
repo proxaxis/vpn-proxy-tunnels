@@ -54,13 +54,15 @@ def start_vpn(req: StartVPNRequest):
             environment={
                 "VPN_SERVER": "https://ldb.c.chuo-u.ac.jp",
                 "VPN_COOKIE": req.cookie,
+                "PROXY_USER": req.username,
+                "PROXY_PASSWORD": os.getenv(f"PROXY_PASS_{req.username.upper()}", ""),
             },
             restart_policy={"Name": "no"}
         )
         return {
             "status": "started",
             "container_id": container.short_id,
-            "proxy_endpoint": f"{req.username}.{BASE_DOMAIN}",
+            "proxy_endpoint": f"{req.username}-{BASE_DOMAIN}",
             "local_forward_port": host_port
         }
     except Exception as e:

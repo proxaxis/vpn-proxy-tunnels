@@ -18,6 +18,20 @@ services:
       - HOST_BASE_DOMAIN=${BASE_DOMAIN:-proxy.example.com}
       - DOCKER_NETWORK=vpn-proxy-tunnels_n-tunnels
       - DOCKER_SOCKET=/var/run/docker.sock
+      - PROXY_PASS_UA=${PROXY_PASS_UA}
+      - PROXY_PASS_UB=${PROXY_PASS_UB}
+      - PROXY_PASS_UC=${PROXY_PASS_UC}
+      - PROXY_PASS_UD=${PROXY_PASS_UD}
+
+  # TLS CONNECT proxy ingress (SNI -> worker squid on 127.0.0.1:108x)
+  proxy-ingress:
+    image: nginx:1.27-alpine
+    container_name: tunnels_proxy_ingress
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./ingress/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ingress/certs:/etc/nginx/certs:ro
 
   # Cloudflare Tunnel
   cloudflared:

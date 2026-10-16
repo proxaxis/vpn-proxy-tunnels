@@ -6,6 +6,11 @@ if [ -z "$VPN_COOKIE" ]; then
   exit 1
 fi
 
+# squid Basic 認証用 passwd (PROXY_USER/PROXY_PASSWORD から生成)
+printf '%s:%s\n' "${PROXY_USER:-vpn}" "$(openssl passwd -apr1 "${PROXY_PASSWORD:?PROXY_PASSWORD is required}")" > /etc/squid/passwd
+chown squid /etc/squid/passwd
+chmod 640 /etc/squid/passwd
+
 # ASA がフルトンネル(デフォルト経路=tun0)を push してきた場合でも、
 # squid(3128)への応答パケットは eth0 側へ返すためのポリシールーティング。
 ETH0_GW="$(ip -o -4 route show dev eth0 to default | awk '{print $3; exit}')"
@@ -15,12 +20,16 @@ if [ -n "$ETH0_GW" ]; then
 fi
 
 # --cookie-on-stdin は「webvpn Cookie の値のみ」を受け取る
-printf '%s\n' "$VPN_COOKIE" | openconnect \
-  --cookie-on-stdin \
-  --protocol=anyconnect \
-  --non-inter \
-  -v \
-  "$VPN_SERVER" &
+start_openconnect() {
+  printf '%s\n' "$VPN_COOKIE" | openconnect \
+    --cookie-on-stdin \
+    --protocol=anyconnect \
+    --non-inter \
+    -v \
+    "$VPN_SERVER" 2>&1 | tee /tmp/oc.log
+}
+
+start_openconnect &
 OC_PID=$!
 
 # tun0 が上がり vpnc-script が resolv.conf を VPN DNS に書き換えるまで待つ。
@@ -37,4 +46,19 @@ fi
 
 squid
 
-wait "$OC_PID"
+# openconnect が落ちた場合の監視ループ。
+# Cookie 拒否(認証失敗)はリトライしても無駄なので即終了、それ以外は再接続を試みる
+while wait "$OC_PID"; do :; done
+for i in 1 2 3 4 5; do
+  if grep -q "Cookie was rejected" /tmp/oc.log 2>/dev/null; then
+    echo "FATAL: webvpn cookie rejected by server" >&2
+    exit 1
+  fi
+  echo "openconnect exited (attempt $i/5), reconnecting in 10s..." >&2
+  sleep 10
+  start_openconnect &
+  OC_PID=$!
+  wait "$OC_PID" || true
+done
+echo "FATAL: openconnect failed after 5 retries" >&2
+exit 1

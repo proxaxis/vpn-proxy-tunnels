@@ -6,9 +6,11 @@
 ## 構成
 
 - `orchestrator/` (FastAPI) — `POST /api/start-vpn` でユーザーごとのワーカーを docker API 経由で起動
-- `worker/` (alpine: openconnect + squid) — `VPN_COOKIE` 環境変数の webvpn Cookie で `tun0` を確立し、3128 で HTTP プロキシ
-- `chromium-extension/` (MV3) — ブラウザで対話ログイン済みの `webvpn` Cookie **値のみ**を収穫して orchestrator に POST
-- `cloudflared` — Cloudflare Tunnel で公開 (`*.vpn-proxy-tunnels.proxaxis.me`)
+- `worker/` (alpine: openconnect + squid) — `VPN_COOKIE` 環境変数の webvpn Cookie で `tun0` を確立し、3128 で HTTP プロキシ (Basic 認証)
+- `chromium-extension/` (MV3) — ブラウザで対話ログイン済みの `webvpn` Cookie **値のみ**を収穫して orchestrator に POST (CF Access Service Token 付き)
+- `cloudflared` — API 公開用 Cloudflare Tunnel (`tunnels.proxaxis.me` → orchestrator:8000, Access=Service Auth)
+- `ingress/` — nginx stream コンテナ (host network, :443)。SNI `ua-proxy.proxaxis.me` 等で TLS 終端 → PROXY protocol → `127.0.0.1:108x` (ワーカー squid)
+  - ※ Cloudflare edge は CONNECT メソッドを中継しないため、プロキシデータ経路は CF を通さず VM に直接公開する設計
 
 ## 認証方式（重要）
 
@@ -65,7 +67,12 @@ docker run --rm -it --cap-add NET_ADMIN --device /dev/net/tun \
 - openconnect v9.12: `--no-cert-check` は削除済み。自己署名には `--servercert pin-sha256:<SPKIのbase64>`。
 - ワーカー entrypoint は `sport 3128` のポリシールーティング(table 100)を入れており、
   フルトンネル時でも squid 応答は eth0 へ戻る。
-- cloudflared 公開ホスト名が squid への HTTP CONNECT を中継できるかは未検証
-  （`ua.vpn-proxy-tunnels.proxaxis.me` → worker:3128 の経路要確認）。
-- 拡張機能の fetch は Cloudflare Access の Service Token ヘッダを送っていない。
-  Access ポリシーで認証必須なら `CF-Access-Client-Id/Secret` の追加が必要。
+- **同一 webvpn Cookie の同時トンネル接続は不可** — ASA が旧セッションを蹴り、
+  「Read error on TLS session」→再接続のフラッピングになる。ワーカーは必ず1つ。
+- squid: `require-proxy-header` 使用時は `proxy_protocol_access` で送信元許可が必須。
+  auth passwd ファイルは squid ユーザーが読める権限にすること。
+- ブラウザ側 PAC 例: `function FindProxyForURL(){ return "HTTPS ua-proxy.proxaxis.me:443"; }`
+  （初回にプロキシ Basic 認証プロンプト: ユーザー名=ua, パスワード=PROXY_PASS_UA）
+- 証明書: `ingress/certs/letsencrypt/` に LE SAN 証明書 (ua|ub|uc|ud-proxy.proxaxis.me)。
+  更新: `docker run --rm -v /var/www/html:/var/www/html -v $PWD/ingress/certs/letsencrypt:/etc/letsencrypt certbot/certbot renew` → `docker compose restart proxy-ingress`
+  (webroot はホスト nginx :80 経由。cron/systemd timer で自動化推奨)

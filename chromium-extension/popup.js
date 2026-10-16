@@ -1,6 +1,14 @@
 const PORTAL_URL = "https://tunnels.proxaxis.me/api/start-vpn";
 const VPN_DOMAIN = "ldb.c.chuo-u.ac.jp";
 
+// Cloudflare Access Service Token (ユーザー選択 ua〜ud に対応)
+const ACCESS_TOKENS = {
+  ua: { id: "5d5d5f35a9b4224bedcdd74af6543c45.access", secret: "cfast_ByIll5txNXaas1avPxk0FtkHp3KIszyKlSmiK2wj1a35496f" },
+  ub: { id: "039dd48d075dc8532bbf4cf241348f40.access", secret: "cfast_OkvmLU6MrgX0nrWWF4N34v7Hu5ajHUw2Lg9kbbdW4edde19e" },
+  uc: { id: "5efddebecdf77306089003a733308f95.access", secret: "cfast_4VhaaBaltODug2Co8ySamOB391PDAf2GOrwIhmCm78f58e25" },
+  ud: { id: "de619cfd5f6284cce9479a40e4ebeb93.access", secret: "cfast_RdN2bMwwg8YZMi12kv21KDFNQ7WMZwcJaB8PanBj4f7555eb" },
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   const sendBtn = document.getElementById("sendBtn");
   const usernameSelect = document.getElementById("username");
@@ -35,11 +43,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       showStatus("Container X へ送信中...", "normal");
 
-      // 2. Container X の API に送信
+      // 2. Container X の API に送信 (Cloudflare Access Service Token 認証)
+      const tok = ACCESS_TOKENS[username];
       const response = await fetch(PORTAL_URL, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "CF-Access-Client-Id": tok.id,
+          "CF-Access-Client-Secret": tok.secret
         },
         body: JSON.stringify({
           username: username,
@@ -47,10 +58,15 @@ document.addEventListener("DOMContentLoaded", () => {
         })
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        data = { detail: `非JSON応答 (HTTP ${response.status})。Cloudflare Access ポリシーを確認してください` };
+      }
 
       if (response.ok) {
-        showStatus(`起動成功!\nContainer: ${data.container_id}\nプロキシを有効化してください。`, "success");
+        showStatus(`起動成功!\nContainer: ${data.container_id}\nプロキシ: HTTPS ${data.proxy_endpoint}:443\n(PAC等で設定・初回は認証入力)`, "success");
       } else {
         showStatus(`起動失敗: ${data.detail || response.statusText}`, "error");
       }
