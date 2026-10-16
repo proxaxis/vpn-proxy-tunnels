@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "VPN Cookie Forwarder",
+  "version": "1.0",
+  "description": "Forward AnyConnect session cookies to Container X",
+  "permissions": [
+    "cookies",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://ldb.c.chuo-u.ac.jp/*",
+    "https://tunnels.proxaxis.me/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "VPN Cookie 送信"
+  }
+}
