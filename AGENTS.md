@@ -46,6 +46,20 @@ docker run --rm -it --cap-add NET_ADMIN --device /dev/net/tun \
 # "CSTP connected" / tun0 UP を確認。フルトンネル push 時は ip route を要確認。
 ```
 
+## 実測で確認済みの挙動 (2026-10-16)
+
+- `webvpn` Cookie で `CONNECT` → `CSTP connected` → `Configured as 10.200.130.x`。
+  `webvpnc`(クライアントレス用)は 401 で拒否される。`webvpn` Cookie は再利用可。
+- ASA は実質フルトンネル push (default via tun0 + RFC1918 等の Split-Exclude)。
+  `X-CSTP-Idle-Timeout: 1800` (30分), セッションリース約14日。
+- **squid はトンネル確立後に起動必須**: 起動時に resolv.conf をキャッシュするため、
+  先に立てると GCP DNS (169.254.169.254) が tun0 経由で死に全宛先が即時 503 になる。
+  entrypoint は tun0 UP + resolv.conf が VPNC_GENERATED になるまで待ってから squid を起動する。
+- 大学側 egress は宛先フィルタあり: 学術 DB (ndl.go.jp, jstage 等) は通るが、
+  一般サイトは SNI ベース RST / タイムアウト / 403 が混在。用途は DB アクセスに限定される。
+- 通信品質はやや不安定 (同一宛先でも 200/タイムアウトが混ざる)。DTLS(UDP) の
+  パケットロスが疑われる場合は `--no-dtls` で TCP のみにする選択肢あり。
+
 ## 既知の注意点
 
 - openconnect v9.12: `--no-cert-check` は削除済み。自己署名には `--servercert pin-sha256:<SPKIのbase64>`。
