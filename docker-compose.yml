@@ -1,0 +1,37 @@
+services:
+  # Orchestrator and Management Portal
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    image: tunnels-orchestrator:latest
+    container_name: tunnels_orchestrator
+    restart: unless-stopped
+    networks:
+      - n-tunnels
+    ports:
+      - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./worker:/app/worker:ro
+    environment:
+      - HOST_BASE_DOMAIN=${BASE_DOMAIN:-proxy.example.com}
+      - DOCKER_NETWORK=vpn-proxy-tunnels_n-tunnels
+      - DOCKER_SOCKET=/var/run/docker.sock
+
+  # Cloudflare Tunnel
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: tunnels_cloudflared
+    restart: unless-stopped
+    networks:
+      - n-tunnels
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - orchestrator
+
+networks:
+  n-tunnels:
+    driver: bridge
