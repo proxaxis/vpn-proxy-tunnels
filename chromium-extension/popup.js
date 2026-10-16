@@ -21,21 +21,21 @@ document.addEventListener("DOMContentLoaded", () => {
     showStatus("Cookie を取得中...", "normal");
 
     try {
-      // 1. 大学VPNドメインのCookieを全取得 (HttpOnly含む)
+      // 1. 大学VPNドメインの webvpn セッションCookieを取得 (HttpOnly含む)
+      //    openconnect --cookie-on-stdin は「値のみ」を受け取り、
+      //    Cookie: webvpn=<値> として送信するため name= 等は付けないこと
       const cookies = await chrome.cookies.getAll({ domain: VPN_DOMAIN });
+      const session = cookies ? cookies.find(c => c.name === "webvpn") : null;
 
-      if (!cookies || cookies.length === 0) {
-        showStatus("Cookie が見つかりません。先にブラウザでVPNログインを完了してください。", "error");
+      if (!session || !session.value) {
+        showStatus("webvpn Cookie が見つかりません。先にブラウザでVPNログインを完了してください。", "error");
         sendBtn.disabled = false;
         return;
       }
 
-      // 2. OpenConnect 用の形式 (name=value; name2=value2) に整形
-      const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join("; ");
-
       showStatus("Container X へ送信中...", "normal");
 
-      // 3. Container X の API に送信
+      // 2. Container X の API に送信
       const response = await fetch(PORTAL_URL, {
         method: "POST",
         headers: {
@@ -43,7 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
         },
         body: JSON.stringify({
           username: username,
-          cookie: cookieHeader
+          cookie: session.value
         })
       });
 

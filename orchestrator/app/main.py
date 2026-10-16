@@ -7,7 +7,7 @@ app = FastAPI(title="VPN Proxy Orchestrator")
 client = docker.DockerClient(base_url="unix://var/run/docker.sock")
 
 BASE_DOMAIN = os.getenv("HOST_BASE_DOMAIN", "proxy.example.com")
-NETWORK_NAME = os.getenv("DOCKER_NETWORK", "vpn-proxy-system_vpn-net")
+NETWORK_NAME = os.getenv("DOCKER_NETWORK", "vpn-proxy-tunnels_n-tunnels")
 
 # ユーザーごとの内部ポートマッピング
 USER_CONFIGS = {
@@ -44,7 +44,7 @@ def start_vpn(req: StartVPNRequest):
     try:
         # Container A を起動
         container = client.containers.run(
-            image="vpn-worker:latest",
+            image="tunnels-worker:latest",
             name=container_name,
             detach=True,
             cap_add=["NET_ADMIN"],
@@ -52,7 +52,7 @@ def start_vpn(req: StartVPNRequest):
             network=NETWORK_NAME,
             ports={"3128/tcp": ("127.0.0.1", host_port)},
             environment={
-                "VPN_SERVER": "https://ssl-vpn.c.chuo-u.ac.jp",
+                "VPN_SERVER": "https://ldb.c.chuo-u.ac.jp",
                 "VPN_COOKIE": req.cookie,
             },
             restart_policy={"Name": "no"}
